@@ -1,19 +1,12 @@
 # Kartu Desain
 
 Tuliskan lima keputusan desain penting dalam pekerjaan kalian. Untuk tiap keputusan, sebutkan
-alternatif yang ditolak dan alasannya. Contoh topik (boleh memilih yang lain):
-
-- bagaimana parser membedakan `*` sebagai "semua kolom" dan sebagai perkalian;
-- di mana dan bagaimana presedensi `AND`/`OR` dinyatakan;
-- mengapa error recovery berhenti di `;`, bukan di keyword `SELECT` berikutnya;
-- urutan pencarian scope dan akibatnya pada shadowing serta correlated subquery;
-- mengapa kolom tanpa qualifier hanya dilihat di scope terdalam, dan apa kelemahannya;
-- bagaimana implementasi `INSERT ... SELECT` atau komentar blok kalian.
+alternatif yang ditolak dan alasannya.
 
 | No | Keputusan | Alternatif yang ditolak | Alasan |
 | --- | --- | --- | --- |
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
+| 1 | **Titik Sinkronisasi Error Recovery Berhenti di Titik Koma (`;`)**<br>Pada fungsi `_synchronize()`, panic mode error recovery membuang token sampai menemukan delimiter `;`, lalu mengonsumsi `;` tersebut dan melanjutkan parsing ke statement berikutnya. | Berhenti di keyword awal statement berikutnya (seperti `SELECT`, `INSERT`, `UPDATE`, `DELETE`). | Keyword seperti `SELECT` sangat umum muncul di dalam subquery (misal pada klausa `WHERE`, `FROM`, atau ekspresi). Jika sinkronisasi berhenti saat melihat keyword `SELECT`, parser berisiko menyinkronkan diri di tengah-tengah statement rusak yang belum selesai, sehingga memicu rentetan error palsu (*cascading errors*) yang mengaburkan kesalahan sebenarnya. |
+| 2 | **Representasi Node AST untuk `INSERT ... SELECT` Menggunakan List Kosong pada Field `values`**<br>Saat membuat node `ast.Insert` dari bentuk `INSERT INTO t SELECT ...`, atribut `values` diisi dengan list kosong `[]`, bukan `None`. | Mengisi `values=None` untuk merepresentasikan ketiadaan klausa `VALUES`. | Pada tahap pass berikutnya (*resolver* dan *analyzer*), penelusuran AST membaca baris nilai menggunakan perulangan `for row in stmt.values`. Jika diisi `None`, program akan memicu `TypeError: 'NoneType' object is not iterable`. Penggunaan `[]` mempertahankan konsistensi antarmuka node AST dan mencegah perlunya pengecekan kondisional `if stmt.values is not None` di banyak tempat. |
+| 3 | **Penanganan Komentar Blok Menggunakan Lookahead Dua Karakter dan Loop Karakter Tunggal**<br>Memindai komentar blok `/* ... */` dengan loop `_advance()` per karakter dan memeriksa pasangan penutup menggunakan `_peek() == '*'` dan `_peek(1) == '/'`. | 1. Menggunakan Regular Expression (regex).<br>2. Hanya mengintip satu karakter lookahead `_peek()`. | 1. Batasan arsitektur melarang penggunaan regex pada pipeline inti compiler, dan scanning per karakter lewat `_advance()` wajib dipakai agar penghitung baris dan kolom (`line`, `col`) tetap terakumulasi akurat saat komentar melintasi beberapa baris (*multiline*).<br>2. Jika hanya memeriksa `_peek() == '*'`, karakter `*` biasa di dalam komentar (misal perkalian matematika atau dekorasi `/* * */`) akan keliru dianggap sebagai penutup komentar. |
+| 4 | **Pembersihan Rantai Scope yang Berimbang pada Siklus Hidup Statement `DELETE`**<br>Menutup scope lokal pada `_delete()` di `crud/resolver.py` dengan pemanggilan `self._pop()` tepat setelah klausa `WHERE` selesai di-resolve. | Memaksa reset scope ke root/None (`self.scope = None`) di awal pemrosesan setiap statement baru. | Pola pemanggilan `_push()` dan `_pop()` harus selalu simetris dan berpasangan (konsep RAII / stack frame lingkungan pada Bab 11 *Crafting Interpreters*). Memaksa reset `self.scope = None` secara manual adalah *anti-pattern* yang menyamarkan bug kebocoran stack scope dan berisiko merusak integritas traversal bila di masa depan ada struktur bersarang antar-statement. |
+| 5 | **Propagasi Operasi Read (`R`) Secara Eksplisit pada Subquery di Statement `UPDATE`**<br>Pada `analyze_statement()` cabang `Update`, fungsi helper `_collect()` dipanggil dengan menyuplai argumen operasi `"R"` untuk penugasan `SET` maupun klausa `WHERE`. | Mengoperasikan pengecekan tipe node di dalam fungsi pembantu `_collect()` untuk mengabaikan atau menimpa operasi `"U"` menjadi `"R"` saat menemukan subquery. | Sesuai SPESIFIKASI.md bagian 5, subquery pada dasarnya selalu merupakan operasi pembacaan data (`R`). Mengoperkan konteks operasi `"R"` secara langsung dari pemanggil menjaga fungsi `_collect()` tetap murni sebagai visitor penelusur pohon ekspresi tanpa perlu mengetahui konteks bisnis statement induknya (*separation of concerns*). |
