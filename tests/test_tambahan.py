@@ -30,3 +30,10 @@ def test_recovery_satu_error_statement_lain_tetap():
     s = parse_sql("SELECT FROM x; SELECT a FROM t; SELECT b FROM u;")
     assert len(s.errors) == 1
     assert len(s.statements) == 2
+
+# --- T1 ---
+def test_insert_select_dengan_kolom():
+    s = parse_sql("INSERT INTO t (a, b) SELECT x, y FROM u;")
+    assert not s.errors
+    ins = s.statements[0]
+    assert ins.columns == ["a", "b"] and ins.query is not None
