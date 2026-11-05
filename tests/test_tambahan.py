@@ -8,6 +8,7 @@ Isi dengan:
 
 from crud.lexer import tokenize, TokenType as T, LexError
 from crud.parser import parse_sql
+from crud.resolver import Resolver
 from crud import ast_nodes as ast
 import pytest
 
@@ -37,3 +38,9 @@ def test_insert_select_dengan_kolom():
     assert not s.errors
     ins = s.statements[0]
     assert ins.columns == ["a", "b"] and ins.query is not None
+
+# --- R2 ---
+def test_alias_delete_tidak_bocor():
+    script = parse_sql("DELETE FROM sesi s WHERE s.k < 1; SELECT s.id FROM pengguna u;")
+    diags = Resolver().resolve_script(script)
+    assert any(d.level == "error" and "'s'" in d.message for d in diags)
