@@ -2,3 +2,5 @@ __pycache__/
 .pytest_cache/
 *.csv
 !data/*.csv
+tests_asli/
+.DS_Store

@@ -91,6 +91,9 @@ class Parser:
         # Panic mode (Crafting Interpreters bab 6): buang token sampai
         # titik aman, lalu lanjutkan parsing.
         while not self._at_end():
+            if self._peek().type == T.SEMICOLON:
+                self._advance()
+                return
             self._advance()
 
     def _statement(self):
@@ -210,8 +213,8 @@ class Parser:
                 rows.append(self._value_row())
             return ast.Insert(table, columns, rows, None, line=start.line)
         if self._check_kw("SELECT"):
-            # TODO(T1): dukung INSERT INTO ... SELECT ... (SPESIFIKASI.md bagian 3 dan 5).
-            raise ParseError("INSERT ... SELECT belum didukung", self._peek())
+            query = self._select()
+            return ast.Insert(table, columns, [], query, line=start.line)
         raise ParseError("diharapkan VALUES atau SELECT", self._peek())
 
     def _value_row(self) -> list:
@@ -379,3 +382,4 @@ class Parser:
 def parse_sql(source: str) -> ast.Script:
     """Tokenize lalu parse satu file SQL. LexError tidak ditangkap di sini."""
     return Parser(tokenize(source)).parse_script()
+
