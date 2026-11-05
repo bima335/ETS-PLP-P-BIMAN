@@ -13,3 +13,12 @@ import pytest
 def test_operator_tidak_sama_satu_token():
     ops = [t for t in tokenize("a <> 1") if t.type == T.OP]
     assert [t.value for t in ops] == ["<>"]
+
+# --- T3 ---
+def test_komentar_blok_lintas_baris_dan_posisi_baris():
+    toks = tokenize("/* a\n * b */ SELECT")
+    assert toks[0].value == "SELECT" and toks[0].line == 2
+
+def test_komentar_blok_tidak_ditutup():
+    with pytest.raises(LexError):
+        tokenize("SELECT /* belum selesai")
