@@ -7,6 +7,8 @@ Isi dengan:
 """
 
 from crud.lexer import tokenize, TokenType as T, LexError
+from crud.parser import parse_sql
+from crud import ast_nodes as ast
 import pytest
 
 # --- L2 ---
@@ -22,3 +24,16 @@ def test_komentar_blok_lintas_baris_dan_posisi_baris():
 def test_komentar_blok_tidak_ditutup():
     with pytest.raises(LexError):
         tokenize("SELECT /* belum selesai")
+
+# --- P2 ---
+def test_recovery_satu_error_statement_lain_tetap():
+    s = parse_sql("SELECT FROM x; SELECT a FROM t; SELECT b FROM u;")
+    assert len(s.errors) == 1
+    assert len(s.statements) == 2
+
+# --- T1 ---
+def test_insert_select_dengan_kolom():
+    s = parse_sql("INSERT INTO t (a, b) SELECT x, y FROM u;")
+    assert not s.errors
+    ins = s.statements[0]
+    assert ins.columns == ["a", "b"] and ins.query is not None
