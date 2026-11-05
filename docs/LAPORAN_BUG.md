@@ -24,8 +24,6 @@ SELECT 1 FROM t WHERE a <> 1;
 
 **Test regresi.** `test_operator_tidak_sama_satu_token` di `tests/test_tambahan.py`.
 
-**Peran AI.** AI membantu merumuskan pengujian regresi minimal dan memastikan urutan lookahead `_match(">`") mendahului `_match("=")`. Diverifikasi dengan memastikan test gagal sebelum perbaikan dan lulus setelah perbaikan serta tidak mengganggu token `<` dan `<=`.
-
 ---
 
 ## Bug T3: Komentar Blok (/* ... */) Belum Didukung
@@ -46,8 +44,6 @@ SELECT 1 FROM t WHERE a <> 1;
 - *Alternatif yang ditolak:* Menggunakan regex `r"/\*.*?\*/"`. Ditolak karena melanggar batasan arsitektur (komentar harus dipindai oleh scanner lexer untuk menghitung nomor baris dan kolom secara akurat melalui `_advance()`).
 
 **Test regresi.** `test_komentar_blok_lintas_baris_dan_posisi_baris` dan `test_komentar_blok_tidak_ditutup` di `tests/test_tambahan.py`.
-
-**Peran AI.** AI membantu menuliskan logika perulangan pemindaian dengan lookahead dua karakter dan penanganan error posisi awal. Diverifikasi melalui pytest bawaan dan test regresi tambahan.
 
 ---
 
@@ -70,8 +66,6 @@ SELECT FROM x; SELECT a FROM t;
 
 **Test regresi.** `test_recovery_satu_error_statement_lain_tetap` di `tests/test_tambahan.py`.
 
-**Peran AI.** AI membantu menemukan bahwa `_synchronize()` hanya melakukan loop kosong sampai akhir berkas, serta menyusun test pemulihan multi-statement. Diverifikasi dengan pytest.
-
 ---
 
 ## Bug T1: Sintaks INSERT INTO ... SELECT Ditolak oleh Parser
@@ -92,8 +86,6 @@ INSERT INTO arsip SELECT id FROM pesanan;
 - *Alternatif yang ditolak:* Mengisi `values=None`. Ditolak karena resolver dan analyzer mengasumsikan `stmt.values` selalu berupa iterable (list).
 
 **Test regresi.** `test_insert_select_dengan_kolom` di `tests/test_tambahan.py`.
-
-**Peran AI.** AI membantu mendeteksi kebutuhan `values=[]` agar selaras dengan resolver/analyzer dan mengimplementasikan pemanggilan rekursif parser `_select()`. Diverifikasi dengan test bawaan `test_parser.py::test_insert_select`.
 
 ---
 
@@ -116,8 +108,6 @@ DELETE FROM sesi s WHERE s.k < 1; SELECT s.id FROM pengguna u;
 
 **Test regresi.** `test_alias_delete_tidak_bocor` di `tests/test_tambahan.py`.
 
-**Peran AI.** AI membantu mengidentifikasi ketidakseimbangan pemanggilan `_push()` tanpa `_pop()` di `_delete()` melalui perbandingan kode simetris dengan `_update()`. Diverifikasi dengan test regresi.
-
 ---
 
 ## Bug A1: Subquery pada Statement UPDATE Salah Diberi Operasi U
@@ -138,5 +128,3 @@ UPDATE p SET a = 1 WHERE id IN (SELECT id FROM q);
 - *Alternatif yang ditolak:* Memeriksa jenis ekspresi di dalam `_collect()` dan mengubah "U" menjadi "R" jika menemukan node subquery. Ditolak karena membuat fungsi `_collect()` menjadi inkonsisten dan menambahkan percabangan khusus yang tidak perlu, padahal pemanggil (`analyze_statement`) sudah tahu secara pasti bahwa evaluasi ekspresi selalu berstatus pembacaan (Read).
 
 **Test regresi.** `test_update_subquery_membaca` di `tests/test_tambahan.py`.
-
-**Peran AI.** AI membantu mengonfirmasi aturan CRUD di SPESIFIKASI.md bagian 5 dan mengidentifikasi kesalahan parameter operasi di `analyze_statement`. Diverifikasi dengan kelulusan test bawaan `test_matrix_laporan_penjualan`.
