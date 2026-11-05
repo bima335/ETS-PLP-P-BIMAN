@@ -9,6 +9,7 @@ Isi dengan:
 from crud.lexer import tokenize, TokenType as T, LexError
 from crud.parser import parse_sql
 from crud.resolver import Resolver
+from crud.pipeline import analyze_source
 from crud import ast_nodes as ast
 import pytest
 
@@ -44,3 +45,8 @@ def test_alias_delete_tidak_bocor():
     script = parse_sql("DELETE FROM sesi s WHERE s.k < 1; SELECT s.id FROM pengguna u;")
     diags = Resolver().resolve_script(script)
     assert any(d.level == "error" and "'s'" in d.message for d in diags)
+
+# --- A1 ---
+def test_update_subquery_membaca():
+    r = analyze_source("UPDATE p SET a = 1 WHERE id IN (SELECT id FROM q);")
+    assert r.matrix() == {"p": "U", "q": "R"}
