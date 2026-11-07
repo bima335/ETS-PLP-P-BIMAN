@@ -1,8 +1,8 @@
 """Test tambahan buatan kelompok.
 
 Bagian 1: satu test regresi untuk tiap bug di docs/LAPORAN_BUG.md
-(L2, T3, P2, T1, R2, A1). Tiap test gagal pada kode lama dan lulus
-sesudah perbaikan.
+(L1, L2, L3, T3, P1, P2, P3, T1, R1, R2, T2, A1). Tiap test gagal pada
+kode lama dan lulus sesudah perbaikan.
 
 Bagian 2: lima test kasus tepi. Masing-masing diberi komentar
 mengapa kasus itu berisiko — yaitu bagian spesifikasi yang mudah
@@ -88,6 +88,88 @@ def test_regress_A1_subquery_update_selalu_read():
     r = analyze_source("UPDATE p SET a = 1 WHERE id IN (SELECT id FROM q);")
     # p memang di-update (U), tetapi q hanya dibaca lewat subquery (R).
     assert r.matrix() == {"p": "U", "q": "R"}
+
+
+# --- Bug L1: keyword peka huruf besar/kecil -----------------------------
+# Kode lama membandingkan teks asli dengan KEYWORDS, sehingga 'select'
+# menjadi IDENT. Perbaikan: bandingkan versi huruf besar, simpan nilai
+# keyword dalam huruf besar. Kata yang hanya DIAWALI keyword tetap IDENT.
+def test_regress_L1_keyword_tidak_peka_huruf():
+    toks = tokenize("select Select SELECT selection fromage")
+    assert [(t.type, t.value) for t in toks[:3]] == [(T.KEYWORD, "SELECT")] * 3
+    assert [(t.type, t.value) for t in toks[3:5]] == [
+        (T.IDENT, "selection"), (T.IDENT, "fromage")]
+
+
+# --- Bug L3: '' di dalam string ----------------------------------------
+# Kode lama menutup string di kutip pertama, jadi 'O''Brien' pecah menjadi
+# dua STRING. Spesifikasi 2.4: '' adalah SATU karakter kutip.
+def test_regress_L3_kutip_ganda_dalam_string():
+    toks = [t for t in tokenize("'O''Brien'") if t.type != T.EOF]
+    assert [(t.type, t.value) for t in toks] == [(T.STRING, "O'Brien")]
+    # string yang diakhiri '' lalu kutip penutup tetap utuh
+    assert tokenize("'a'''")[0].value == "a'"
+
+
+# --- Bug P1: AND dan OR berpresedensi sama -------------------------------
+# _logical lama memproses AND/OR dalam satu loop, jadi 'a OR b AND c'
+# dibaca '(a OR b) AND c'. Spesifikasi 3.1: AND lebih kuat dari OR.
+def test_regress_P1_and_lebih_kuat_dari_or():
+    s = parse_sql("SELECT 1 FROM t WHERE a = 1 OR b = 2 AND c = 3;")
+    w = s.statements[0].where
+    assert isinstance(w, ast.BinaryOp) and w.op == "OR"
+    assert w.left.op == "="
+    assert w.right.op == "AND"
+    # asosiatif kiri: a AND b AND c = (a AND b) AND c
+    w2 = parse_sql("SELECT 1 FROM t WHERE a = 1 AND b = 2 AND c = 3;").statements[0].where
+    assert w2.op == "AND" and w2.left.op == "AND" and w2.right.op == "="
+
+
+# --- Bug P3: LEFT OUTER JOIN ditolak -------------------------------------
+# Grammar: join = [ INNER | LEFT [ OUTER ] ] JOIN. Kode lama tidak menerima
+# OUTER setelah LEFT sehingga statement ditolak.
+def test_regress_P3_left_outer_join():
+    for sql in ("SELECT 1 FROM a LEFT OUTER JOIN b ON a.x = b.x;",
+                "SELECT 1 FROM a LEFT JOIN b ON a.x = b.x;"):
+        s = parse_sql(sql)
+        assert not s.errors
+        assert s.statements[0].joins[0].kind == "LEFT"
+
+
+# --- Bug R1: pencarian scope dari luar ke dalam ---------------------------
+# _lookup lama mencari dari scope terluar, sehingga alias subquery tidak
+# menutupi alias luar. Spesifikasi 4.3: terdalam dulu (shadowing), dan
+# alias luar tetap terlihat (correlated subquery).
+def _resolved(sql):
+    script = parse_sql(sql)
+    diags = Resolver().resolve_script(script)
+    cols = [(n.qualifier, n.name, n.resolved)
+            for st in script.statements for n in ast.iter_nodes(st)
+            if isinstance(n, ast.ColumnRef)]
+    return diags, cols
+
+
+def test_regress_R1_shadowing_dan_correlated():
+    diags, cols = _resolved(
+        "SELECT x.a FROM t x WHERE x.a IN (SELECT x.b FROM u x);")
+    assert not diags
+    # x.b di subquery harus ke u (alias dalam menutupi alias luar)
+    assert ("x", "b", "u") in cols
+    diags, cols = _resolved(
+        "SELECT p.a FROM t p WHERE EXISTS (SELECT 1 FROM u WHERE u.id = p.id);")
+    assert not diags
+    assert ("p", "id", "t") in cols      # subquery masih melihat alias luar
+
+
+# --- TODO T2: kolom tanpa qualifier --------------------------------------
+# Satu tabel -> resolved; lebih dari satu -> warning dan resolved None.
+def test_regress_T2_kolom_tanpa_qualifier():
+    diags, cols = _resolved("SELECT a FROM crm.t;")
+    assert not diags and cols == [(None, "a", "crm.t")]
+    diags, cols = _resolved("SELECT a FROM t, u;")
+    assert [d.level for d in diags] == ["warning"]
+    assert "ambigu tanpa skema" in diags[0].message
+    assert cols == [(None, "a", None)]
 
 
 # ============================================================
