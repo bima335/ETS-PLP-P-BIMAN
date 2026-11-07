@@ -179,6 +179,7 @@ class Parser:
             kind = "INNER"
         elif self._match_kw("LEFT"):
             kind = "LEFT"
+            self._match_kw("OUTER")
         self._expect_kw("JOIN")
         source = self._table_ref()
         self._expect_kw("ON")
@@ -249,7 +250,19 @@ class Parser:
 
     # ---- ekspresi (dari presedensi terendah ke tertinggi) ---------------
     def _expr(self):
-        return self._logical()
+        return self._or()
+    
+    def _or(self):
+        left = self._and()
+        while self._match_kw("OR"):
+            left = ast.BinaryOp(left, "OR", self._and())
+        return left
+    
+    def _and(self):
+        left = self._not()
+        while self._match_kw("AND"):
+            left = ast.BinaryOp(left, "AND", self._not())
+        return left
 
     def _logical(self):
         # OR dan AND: operator logika biner, asosiatif kiri.
