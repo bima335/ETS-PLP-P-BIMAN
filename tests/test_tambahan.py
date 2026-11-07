@@ -1,12 +1,19 @@
-"""Test tambahan buatan kelompok.
+"""Test tambahan buatan kelompok (total 17 test; ketentuan minimal 14).
 
-Bagian 1: satu test regresi untuk tiap bug di docs/LAPORAN_BUG.md
-(L1, L2, L3, T3, P1, P2, P3, T1, R1, R2, T2, A1). Tiap test gagal pada
-kode lama dan lulus sesudah perbaikan.
+Bagian 1: 9 test regresi, satu per bug yang ditanam di kode awal
+(L1, L2, L3, P1, P2, P3, R1, R2, A1). Nama test menyebut ID bug-nya
+(`test_regress_<ID>_...`) dan ID itu sama dengan di docs/LAPORAN_BUG.md.
 
-Bagian 2: lima test kasus tepi. Masing-masing diberi komentar
-mengapa kasus itu berisiko — yaitu bagian spesifikasi yang mudah
-"terlompati" oleh implementasi yang naif.
+Bagian 2: 3 test untuk fitur yang awalnya berupa TODO di kode (T1, T2, T3).
+Bukan bug yang ditanam, tetapi diuji dengan pola yang sama.
+
+Bagian 3: 5 test kasus tepi. Masing-masing diberi komentar mengapa kasus
+itu berisiko, yaitu bagian spesifikasi yang mudah "terlompati" oleh
+implementasi yang naif.
+
+Semua test regresi (Bagian 1 dan 2) gagal pada kode awal (commit 2969d29)
+dan lulus pada kode sesudah perbaikan. Dicek juga per bug: jika perbaikan
+satu bug saja dibatalkan, test bug itu yang gagal.
 """
 
 from crud.lexer import tokenize, TokenType as T, LexError
@@ -18,7 +25,7 @@ import pytest
 
 
 # ============================================================
-# Bagian 1 — Test regresi per bug
+# Bagian 1 — 9 test regresi, satu per bug
 # ============================================================
 
 # --- Bug L2: maximal munch untuk operator '<>' -------------------------
@@ -28,20 +35,6 @@ def test_regress_L2_neq_satu_token():
     ops = [t for t in tokenize("a <> 1") if t.type == T.OP]
     # Maximal munch: operator terpanjang harus jadi SATU token OP '<>'.
     assert [t.value for t in ops] == ["<>"]
-
-
-# --- Bug T3: komentar blok (/* ... */) belum didukung -----------------
-# Kode lama melempar LexError begitu melihat '/*'. Perbaikan harus juga
-# menangani komentar tidak ditutup (LexError) dan menjaga posisi baris.
-def test_regress_T3_komentar_blok():
-    # Komentar lintas baris tidak boleh menghasilkan token, dan SELECT
-    # yang mengikutinya harus tetap tercatat di baris 2.
-    toks = tokenize("/* baris pertama\n * baris kedua */ SELECT 1")
-    assert toks[0].type == T.KEYWORD and toks[0].value == "SELECT"
-    assert toks[0].line == 2
-    # Komentar blok yang tidak ditutup hingga EOF adalah LexError.
-    with pytest.raises(LexError):
-        tokenize("SELECT /* tidak pernah ditutup")
 
 
 # --- Bug P2: panic mode menelan seluruh statement berikutnya ----------
@@ -54,20 +47,6 @@ def test_regress_P2_recovery_tidak_menelan_sisa_script():
     assert isinstance(s.errors[0], ParseError)
     # ... dan dua statement valid setelahnya tetap diparse.
     assert len(s.statements) == 2
-
-
-# --- Bug T1: INSERT INTO ... SELECT ditolak -----------------------------
-# Cabang SELECT di _insert() lama masih placeholder yang melempar
-# ParseError; kode benar menghasilkan ast.Insert dengan query terisi.
-def test_regress_T1_insert_select():
-    s = parse_sql("INSERT INTO t (a, b) SELECT x, y FROM u;")
-    assert not s.errors
-    ins = s.statements[0]
-    assert isinstance(ins, ast.Insert)
-    # Kolom target terbaca, dan sumbernya adalah sub-SELECT, bukan VALUES.
-    assert ins.columns == ["a", "b"]
-    assert ins.query is not None
-    assert ins.values == []
 
 
 # --- Bug R2: scope DELETE bocor ke statement berikutnya -----------------
@@ -161,7 +140,25 @@ def test_regress_R1_shadowing_dan_correlated():
     assert ("p", "id", "t") in cols      # subquery masih melihat alias luar
 
 
-# --- TODO T2: kolom tanpa qualifier --------------------------------------
+# ============================================================
+# Bagian 2 — 3 test regresi untuk fitur TODO (T1, T2, T3)
+# ============================================================
+
+# --- Fitur T1: INSERT INTO ... SELECT ditolak -----------------------------
+# Cabang SELECT di _insert() lama masih placeholder yang melempar
+# ParseError; kode benar menghasilkan ast.Insert dengan query terisi.
+def test_regress_T1_insert_select():
+    s = parse_sql("INSERT INTO t (a, b) SELECT x, y FROM u;")
+    assert not s.errors
+    ins = s.statements[0]
+    assert isinstance(ins, ast.Insert)
+    # Kolom target terbaca, dan sumbernya adalah sub-SELECT, bukan VALUES.
+    assert ins.columns == ["a", "b"]
+    assert ins.query is not None
+    assert ins.values == []
+
+
+# --- Fitur T2: kolom tanpa qualifier --------------------------------------
 # Satu tabel -> resolved; lebih dari satu -> warning dan resolved None.
 def test_regress_T2_kolom_tanpa_qualifier():
     diags, cols = _resolved("SELECT a FROM crm.t;")
@@ -172,8 +169,22 @@ def test_regress_T2_kolom_tanpa_qualifier():
     assert cols == [(None, "a", None)]
 
 
+# --- Fitur T3: komentar blok (/* ... */) belum didukung -----------------
+# Kode lama melempar LexError begitu melihat '/*'. Perbaikan harus juga
+# menangani komentar tidak ditutup (LexError) dan menjaga posisi baris.
+def test_regress_T3_komentar_blok():
+    # Komentar lintas baris tidak boleh menghasilkan token, dan SELECT
+    # yang mengikutinya harus tetap tercatat di baris 2.
+    toks = tokenize("/* baris pertama\n * baris kedua */ SELECT 1")
+    assert toks[0].type == T.KEYWORD and toks[0].value == "SELECT"
+    assert toks[0].line == 2
+    # Komentar blok yang tidak ditutup hingga EOF adalah LexError.
+    with pytest.raises(LexError):
+        tokenize("SELECT /* tidak pernah ditutup")
+
+
 # ============================================================
-# Bagian 2 — Lima test kasus tepi
+# Bagian 3 — Lima test kasus tepi
 # ============================================================
 
 # --- Tepi 1: komentar blok berisi '*' dan '--' --------------------------
